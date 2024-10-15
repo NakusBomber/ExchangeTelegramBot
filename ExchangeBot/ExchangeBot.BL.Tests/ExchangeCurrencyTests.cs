@@ -4,29 +4,14 @@ namespace ExchangeBot.BL.Tests;
 
 public class ExchangeCurrencyTests
 {
-    [Theory]
-    [InlineData("U1D")]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("US")]
-    [InlineData("US2")]
-    [InlineData("U_S")]
-    [InlineData("0-a")]
-    public void Constructor_ThrowExceptionOnInvalidCurrencyCode(string code)
-    {
-        Assert.Throws<NotValidCurrencyCode>(() =>
-        {
-            new ExchangeCurrency(code);
-        });
-    }
-
+    
     [Theory]
     [InlineData(-1, -1)]
     [InlineData(-1.2, 0)]
     [InlineData(0, -1.1)]
     public void Purchase_ArgumentsAreZero(decimal count, decimal rate)
     {
-        var exchanger = new ExchangeCurrency("UAH");
+        var exchanger = new ExchangeCurrency();
         Assert.Throws<ArgumentException>(() =>
         {
             exchanger.Purchase(count, rate);
@@ -43,7 +28,7 @@ public class ExchangeCurrencyTests
     [InlineData(7, 1.2, 8.4)]  
     public void Purchase_Data_Test(decimal count, decimal rate, decimal expected)
     {
-        var exchanger = new ExchangeCurrency("TST");
+        var exchanger = new ExchangeCurrency();
         var actual = exchanger.Purchase(count, rate);
         
         Assert.Equal(expected, actual, 10);

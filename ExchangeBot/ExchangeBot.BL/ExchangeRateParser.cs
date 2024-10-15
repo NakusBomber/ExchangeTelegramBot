@@ -34,6 +34,11 @@ public class ExchangeRateParser : IExchangeRateParser
 
     public async Task<decimal> GetPurchaseRateAsync(string currencyCode, DateOnly date)
     {
+        if (!IsValidCurrencyCode(currencyCode))
+        {
+            throw new NotValidCurrencyCode();
+        }
+
         var request = new HttpRequestMessage(HttpMethod.Get, UriWithQueries(currencyCode, date));
         var response = await _httpClient.SendAsync(request);
 
@@ -59,6 +64,25 @@ public class ExchangeRateParser : IExchangeRateParser
         {
             throw new DataNotFoundExchangeException();
         }
+    }
+    private bool IsValidCurrencyCode(string currencyCode)
+    {
+        if (string.IsNullOrEmpty(currencyCode))
+        {
+            return false;
+        }
+
+        if (currencyCode.Any(ch => !char.IsLetter(ch)))
+        {
+            return false;
+        }
+
+        if (currencyCode.Length != 3)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private Uri UriWithQueries(string currencyCode, DateOnly date)

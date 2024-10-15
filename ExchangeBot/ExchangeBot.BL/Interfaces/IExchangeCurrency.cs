@@ -2,7 +2,5 @@
 
 public interface IExchangeCurrency
 {
-    public string CurrencyCode { get; set; }
-
     public decimal Purchase(decimal count, decimal rate);
 }
