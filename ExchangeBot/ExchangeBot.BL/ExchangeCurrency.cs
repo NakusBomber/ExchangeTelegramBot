@@ -18,6 +18,11 @@ public class ExchangeCurrency : IExchangeCurrency
 
     public decimal Purchase(decimal count, decimal rate)
     {
+        if(count < 0 || rate < 0)
+        {
+            throw new ArgumentException("Count or rate less than zero");
+        }
+
         return count * rate;
     }
 
