@@ -32,29 +32,39 @@ public class ExchangeTelegramBot
 		_logger = logger;
 		_exchanger = exchangeCurrency;
 		_parser = parser;
-		BotToken? botToken;
-		try
-		{
-            var textFile = System.IO.File.ReadAllText(pathToToken);
-            botToken = JsonConvert.DeserializeObject<BotToken>(textFile);
-			
-			if(botToken == null || string.IsNullOrEmpty(botToken.Value))
-			{
-				throw new ArgumentNullException(nameof(botToken));
-			}
-        }
-		catch (Exception)
-		{
-			throw new NotFindTokenException();
-		}
-        _botClient = new TelegramBotClient(botToken.Value, cancellationToken: _cts.Token);
+		
+		var botToken = ReadToken(pathToToken);
+        Log(LogLevel.Information, "Bot initializing...");
+        _botClient = new TelegramBotClient(botToken, cancellationToken: _cts.Token);
 		Setup();
+        Log(LogLevel.Information, "Bot successfully initialyzed");
     }
 
 	public async Task StopAsync()
 	{
 		await _botClient.CloseAsync();
 	}
+
+	private string ReadToken(string pathToToken)
+	{
+        try
+        {
+            var textFile = System.IO.File.ReadAllText(pathToToken);
+            var token = JsonConvert.DeserializeObject<BotToken>(textFile);
+
+            if (token == null || string.IsNullOrEmpty(token.Value))
+            {
+                throw new ArgumentNullException(nameof(token));
+            }
+
+            Log(LogLevel.Information, "Bot token successfully readed");
+			return token.Value;
+        }
+        catch (Exception)
+        {
+            throw new NotFindTokenException();
+        }
+    }
 
     private void Setup()
     {
@@ -64,7 +74,7 @@ public class ExchangeTelegramBot
 
     private async Task OnGeneralMessage(Message message, UpdateType type)
     {
-        if (message.Text is null)
+        if (string.IsNullOrEmpty(message.Text))
 		{
 			return;
 		}
@@ -88,18 +98,13 @@ public class ExchangeTelegramBot
 	{
 		Log(LogLevel.Information, $"{message.Chat}: send command '{message.Text}'");
 
-		if(message.Text is null)
-		{
-			return;
-		}
-
 		if(message.Text == "/start" || message.Text == "/help")
 		{
 			await SendHelpMessage(message.Chat);
 			return;
         }
 
-		if (message.Text.StartsWith("/convert"))
+		if (message.Text!.StartsWith("/convert"))
 		{
 			await OnConvertCommand(message);
 		}
@@ -118,46 +123,52 @@ public class ExchangeTelegramBot
 		{
             args.Rate = await _parser.GetPurchaseRateAsync(args.Code, args.Date);
             var result = _exchanger.Purchase(args.Count, args.Rate ?? 0.0M);
-            await SendTextIfMessageNotFound(
-				responseMessage, 
-				$"{args.Date}\n{args.Code} -> UAH\nCount = {args.Count}\nRate = {args.Rate}\nResult = {result}"
-			);
+			var resultText = $"{args.Date}\n{args.Code} -> UAH\nCount = {args.Count}\nRate = {args.Rate}\nResult = {result}";
+            await SendTextIfMessageNotFound(responseMessage, resultText);
         }
-		catch (NotValidCurrencyCode)
-		{
-			await SendTextIfMessageNotFound(responseMessage, "Incorrect form currency code");
-            return;
-		}
-		catch (ResponseFailedException responseEx)
-		{
-			Log(LogLevel.Warning, responseEx.Message);
-			await SendTextIfMessageNotFound(responseMessage, "Error with API :-(");
-            return;
-        }
-		catch (DataNotFoundExchangeException)
-		{
-			await SendTextIfMessageNotFound(responseMessage, "Not found data for this date or currency code");
-            return;
-        }
-		catch (ArgumentException e)
-		{
-			await SendTextIfMessageNotFound(responseMessage, e.Message);
-			return;
-		}
 		catch (Exception ex)
 		{
-			Log(LogLevel.Error, ex.Message);
+            if(!(await HandleConvertCommandErrorAsync(message, ex)))
+            {
+			    Log(LogLevel.Error, ex.Message);
+            }
 		}
+    }
+
+    /// <summary>
+    /// Handle error from convert command
+    /// </summary>
+    /// <param name="message">Receive message</param>
+    /// <param name="exception">Exception</param>
+    /// <returns>
+    /// <see langword="true"/> if exception handled, 
+    /// <see langword="false"/> - otherwise
+    /// </returns>
+	private async Task<bool> HandleConvertCommandErrorAsync(Message message, Exception exception)
+    {
+        switch (exception)
+        {
+            case NotValidCurrencyCode:
+                await SendTextIfMessageNotFound(message, "Incorrect form currency code");
+                return true;
+            case ResponseFailedException:
+                Log(LogLevel.Warning, exception.Message);
+                await SendTextIfMessageNotFound(message, "Error with API :-(");
+                return true;
+            case DataNotFoundExchangeException:
+                await SendTextIfMessageNotFound(message, "Not found data for this date or currency code");
+                return true;
+            case ArgumentException:
+                await SendTextIfMessageNotFound(message, exception.Message);
+                return true;
+            default:
+                return false;
+        }
     }
 
 	private async Task<ConvertCommandArgs?> ParseConvertCommandArgsAsync(Message message)
 	{
-        if (message.Text is null)
-        {
-            return null;
-        }
-
-        var chunks = message.Text.Split();
+        var chunks = message.Text!.Split();
         if (chunks.Length != 4)
         {
             await SendHelpMessage(message.Chat);
@@ -195,27 +206,19 @@ public class ExchangeTelegramBot
         }
     }
 
-	private async Task SendCountArgError(Chat chat)
-	{
+	private async Task SendCountArgError(Chat chat) =>
 		await _botClient.SendTextMessageAsync(chat, "Count must be in format: '2.1', '12'");
-	}
 
-	private async Task SendDateArgError(Chat chat)
-	{
+	private async Task SendDateArgError(Chat chat) =>
 		await _botClient.SendTextMessageAsync(chat, "Incorrect format date or error in date");
-	}
-
-    private async Task SendHelpMessage(Chat chat)
-	{
+    
+	private async Task SendHelpMessage(Chat chat) =>
         await _botClient.SendTextMessageAsync(
             chat,
             $"Use: \n<code>{_convertCommand}</code>\nExample:\n<code>{_convertExample}</code>",
             parseMode: ParseMode.Html
         );
-    }
 
-    private void Log(LogLevel logLevel, string message, params object?[] args)
-	{
+    private void Log(LogLevel logLevel, string message, params object?[] args) =>
         _logger?.Log(logLevel, message, args);
-    }
 }
