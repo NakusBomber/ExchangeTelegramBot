@@ -60,6 +60,10 @@ public class ExchangeRateParser : IExchangeRateParser
             var item = list.First();
             return item.Rate;
         }
+        catch (JsonSerializationException)
+        {
+            throw;
+        }
         catch (Exception)
         {
             throw new DataNotFoundExchangeException();
@@ -67,32 +71,21 @@ public class ExchangeRateParser : IExchangeRateParser
     }
     private bool IsValidCurrencyCode(string currencyCode)
     {
-        if (string.IsNullOrEmpty(currencyCode))
-        {
-            return false;
-        }
-
-        if (currencyCode.Any(ch => !char.IsLetter(ch)))
-        {
-            return false;
-        }
-
-        if (currencyCode.Length != 3)
-        {
-            return false;
-        }
-
-        return true;
+        return !string.IsNullOrEmpty(currencyCode) &&
+                currencyCode.All(char.IsLetter) &&
+                currencyCode.Length == 3;
     }
-
+        
     private Uri UriWithQueries(string currencyCode, DateOnly date)
     {
+        var query = HttpUtility.ParseQueryString(string.Empty);
+
+        query["valcode"] = currencyCode;
+        query["date"] = FormattedDate(date);
+        query["json"] = "true";
+
         var uriBuilder = new UriBuilder(_apiUri);
-        uriBuilder.Query += $"?valcode={currencyCode}";
-        uriBuilder.Query += $"&date={FormattedDate(date)}";
-        
-        uriBuilder.Query += $"&json";
-        uriBuilder.Query.TrimEnd('=');
+        uriBuilder.Query = query.ToString();
         return uriBuilder.Uri;
     }
 
